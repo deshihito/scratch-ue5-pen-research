@@ -1,0 +1,8 @@
+vendor/
+out/
+_runner.html
+__pycache__/
+*.pyc
+*.tgz
+node_modules/
+.DS_Store
