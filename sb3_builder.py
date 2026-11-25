@@ -223,6 +223,21 @@ class SpriteBuilder:
             return bid
         return Expr("block", build)
 
+    def mouse_down(self):
+        def build(parent_id):
+            return self._add_block("sensing_mousedown")
+        return Expr("block", build)
+
+    def mouse_x(self):
+        def build(parent_id):
+            return self._add_block("sensing_mousex")
+        return Expr("block", build)
+
+    def mouse_y(self):
+        def build(parent_id):
+            return self._add_block("sensing_mousey")
+        return Expr("block", build)
+
     def item_of(self, list_name, idx):
         lid = self._ensure_list(list_name)
         def build(parent_id):

@@ -344,6 +344,9 @@ def build_ue5_lumen_hybrid():
     camPitch = s.var("camPitch", -5.5)
     fov = s.var("fov", 1.38)
     FOCAL = 248.4
+    wasDown, prevMX, prevMY = s.var("wasDown", 0), s.var("prevMX", 0), s.var("prevMY", 0)
+    dmx, dmy = s.var("dmx", 0), s.var("dmy", 0)
+    velYaw, velPitch = s.var("velYaw", 0), s.var("velPitch", 0)
 
     fwdX, fwdY, fwdZ = s.var("fwdX"), s.var("fwdY"), s.var("fwdZ")
     rgtX, rgtY, rgtZ = s.var("rgtX"), s.var("rgtY"), s.var("rgtZ")
@@ -1857,6 +1860,8 @@ def build_ue5_lumen_hybrid():
                 s.set_var("DONE", 1),
             ],
             [
+                s.set_var("needsRender", 1),
+                s.set_var("lastFlickMs", now_ms()),
                 s.forever([
                     s.set_var("tmp3", 0),
                     s.if_(s.key_pressed("w"), [s.change_var("camX", s.mul(fwdX, 0.12)), s.change_var("camZ", s.mul(fwdZ, 0.12)), s.set_var("tmp3", 1)]),
@@ -1869,19 +1874,85 @@ def build_ue5_lumen_hybrid():
                     s.if_(s.key_pressed("right arrow"), [s.change_var("camYaw", 2.8), s.set_var("tmp3", 1)]),
                     s.if_(s.key_pressed("up arrow"), [s.change_var("camPitch", 2.0), s.set_var("tmp3", 1)]),
                     s.if_(s.key_pressed("down arrow"), [s.change_var("camPitch", -2.0), s.set_var("tmp3", 1)]),
-                    s.if_(s.key_pressed("0"), [s.set_var("AUTO_STEP", 1)]),
-                    s.if_(s.key_pressed("1"), [s.set_var("AUTO_STEP", 0), s.set_var("SPHERE_STEP", 2)]),
-                    s.if_(s.key_pressed("2"), [s.set_var("AUTO_STEP", 0), s.set_var("SPHERE_STEP", 1)]),
-                    s.if_(s.key_pressed("3"), [s.set_var("FLOOR_REFL", 1)]),
-                    s.if_(s.key_pressed("4"), [s.set_var("FLOOR_REFL", 0)]),
-                    s.if_(s.eq(AUTO_STEP, 1), [
-                        s.if_else(s.eq(tmp3, 1), [s.set_var("SPHERE_STEP", 2)], [s.set_var("SPHERE_STEP", 1)]),
-                    ]),
+                    # Smartphone Touch-Drag & 60Hz Time-Gated Flick Inertia Camera Look!
+                    s.if_else(
+                        s.mouse_down(),
+                        [
+                            s.if_else(
+                                s.eq(wasDown, 0),
+                                [
+                                    s.set_var("prevMX", s.mouse_x()),
+                                    s.set_var("prevMY", s.mouse_y()),
+                                    s.set_var("velYaw", 0),
+                                    s.set_var("velPitch", 0),
+                                    s.set_var("wasDown", 1),
+                                    s.set_var("lastFlickMs", now_ms()),
+                                ],
+                                [
+                                    s.set_var("dmx", s.sub(s.mouse_x(), prevMX)),
+                                    s.set_var("dmy", s.sub(s.mouse_y(), prevMY)),
+                                    s.set_var("prevMX", s.mouse_x()),
+                                    s.set_var("prevMY", s.mouse_y()),
+                                    s.if_(s.lor(s.gt(s.abs_(dmx), 0.2), s.gt(s.abs_(dmy), 0.2)), [
+                                        s.change_var("camYaw", s.mul(dmx, 0.30)),
+                                        s.change_var("camPitch", s.mul(dmy, 0.24)),
+                                        s.set_var("velYaw", s.add(s.mul(velYaw, 0.35), s.mul(dmx, 0.22))),
+                                        s.set_var("velPitch", s.add(s.mul(velPitch, 0.35), s.mul(dmy, 0.16))),
+                                        *clamp_r(s, "velYaw", -12.0, 12.0),
+                                        *clamp_r(s, "velPitch", -9.0, 9.0),
+                                        s.set_var("lastFlickMs", now_ms()),
+                                        s.set_var("tmp3", 1),
+                                    ]),
+                                ],
+                            ),
+                        ],
+                        [
+                            s.set_var("wasDown", 0),
+                            s.if_else(
+                                s.lor(s.gt(s.abs_(velYaw), 0.12), s.gt(s.abs_(velPitch), 0.12)),
+                                [
+                                    # Time-gate flick momentum to ~60Hz so Turbo Mode glides smoothly instead of snapping!
+                                    s.if_(s.gt(s.sub(now_ms(), s.var("lastFlickMs")), 15.0), [
+                                        s.set_var("lastFlickMs", now_ms()),
+                                        s.change_var("camYaw", velYaw),
+                                        s.change_var("camPitch", velPitch),
+                                        s.set_var("velYaw", s.mul(velYaw, 0.85)),
+                                        s.set_var("velPitch", s.mul(velPitch, 0.85)),
+                                        s.set_var("tmp3", 1),
+                                    ]),
+                                ],
+                                [
+                                    s.set_var("velYaw", 0),
+                                    s.set_var("velPitch", 0),
+                                ],
+                            ),
+                        ],
+                    ),
+                    s.if_(s.key_pressed("0"), [s.set_var("AUTO_STEP", 1), s.set_var("needsRender", 1)]),
+                    s.if_(s.key_pressed("1"), [s.set_var("AUTO_STEP", 0), s.set_var("SPHERE_STEP", 2), s.set_var("needsRender", 1)]),
+                    s.if_(s.key_pressed("2"), [s.set_var("AUTO_STEP", 0), s.set_var("SPHERE_STEP", 1), s.set_var("needsRender", 1)]),
+                    s.if_(s.key_pressed("3"), [s.set_var("FLOOR_REFL", 1), s.set_var("needsRender", 1)]),
+                    s.if_(s.key_pressed("4"), [s.set_var("FLOOR_REFL", 0), s.set_var("needsRender", 1)]),
                     *clamp_r(s, "camX", -3.15, 4.5),
                     *clamp_r(s, "camY", -0.85, 2.55),
                     *clamp_r(s, "camZ", -6.5, 3.85),
                     *clamp_r(s, "camPitch", -48, 42),
-                    s.call_proc(p_render_frame),
+                    # Dirty-driven render: instant smooth updates while moving/flicking -> 1px HD snap -> 0% idle CPU!
+                    s.if_else(
+                        s.eq(tmp3, 1),
+                        [
+                            s.if_(s.eq(AUTO_STEP, 1), [s.set_var("SPHERE_STEP", 2)]),
+                            s.call_proc(p_render_frame),
+                            s.set_var("needsRender", 1),
+                        ],
+                        [
+                            s.if_(s.eq(s.var("needsRender"), 1), [
+                                s.if_(s.eq(AUTO_STEP, 1), [s.set_var("SPHERE_STEP", 1)]),
+                                s.call_proc(p_render_frame),
+                                s.set_var("needsRender", 0),
+                            ]),
+                        ],
+                    ),
                 ]),
             ],
         ),

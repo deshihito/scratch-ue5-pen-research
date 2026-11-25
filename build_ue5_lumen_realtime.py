@@ -908,6 +908,8 @@ def build_ue5_lumen_realtime():
                 # Moving: 160x120 (or 240x180) 1/4 checkerboard @ 8-20+ FPS with FULL TRUE LUMEN REFLECTIONS!
                 # Idle for 4 sub-frames: snaps to full 480x360 HD + GPU Pen Bloom!
                 s.set_var("idleFrames", 0),
+                s.set_var("wasDown", 0), s.set_var("prevMX", 0), s.set_var("prevMY", 0),
+                s.set_var("velYaw", 0), s.set_var("velPitch", 0),
                 s.forever([
                     s.set_var("dTmp", 0),
                     s.if_(s.key_pressed("w"), [s.change_var("camX", s.mul(fwdX, 0.14)), s.change_var("camZ", s.mul(fwdZ, 0.14)), s.set_var("dTmp", 1)]),
@@ -918,6 +920,55 @@ def build_ue5_lumen_realtime():
                     s.if_(s.key_pressed("right arrow"), [s.change_var("camYaw", 3.0), s.set_var("dTmp", 1)]),
                     s.if_(s.key_pressed("up arrow"), [s.change_var("camPitch", 2.0), s.set_var("dTmp", 1)]),
                     s.if_(s.key_pressed("down arrow"), [s.change_var("camPitch", -2.0), s.set_var("dTmp", 1)]),
+                    # Smartphone Touch-Drag & Flick Inertia Camera Look
+                    s.if_else(
+                        s.mouse_down(),
+                        [
+                            s.if_else(
+                                s.eq(s.var("wasDown"), 0),
+                                [
+                                    s.set_var("prevMX", s.mouse_x()),
+                                    s.set_var("prevMY", s.mouse_y()),
+                                    s.set_var("velYaw", 0),
+                                    s.set_var("velPitch", 0),
+                                    s.set_var("wasDown", 1),
+                                ],
+                                [
+                                    s.set_var("dmx", s.sub(s.mouse_x(), s.var("prevMX"))),
+                                    s.set_var("dmy", s.sub(s.mouse_y(), s.var("prevMY"))),
+                                    s.set_var("prevMX", s.mouse_x()),
+                                    s.set_var("prevMY", s.mouse_y()),
+                                    s.if_(s.lor(s.gt(s.abs_(s.var("dmx")), 0.2), s.gt(s.abs_(s.var("dmy")), 0.2)), [
+                                        s.change_var("camYaw", s.mul(s.var("dmx"), 0.28)),
+                                        s.change_var("camPitch", s.mul(s.var("dmy"), 0.22)),
+                                        s.set_var("velYaw", s.add(s.mul(s.var("velYaw"), 0.30), s.mul(s.var("dmx"), 0.22))),
+                                        s.set_var("velPitch", s.add(s.mul(s.var("velPitch"), 0.30), s.mul(s.var("dmy"), 0.16))),
+                                        *clamp_r(s, "velYaw", -14.0, 14.0),
+                                        *clamp_r(s, "velPitch", -10.0, 10.0),
+                                        s.set_var("dTmp", 1),
+                                    ]),
+                                ],
+                            ),
+                        ],
+                        [
+                            s.set_var("wasDown", 0),
+                            s.if_else(
+                                s.lor(s.gt(s.abs_(s.var("velYaw")), 0.12), s.gt(s.abs_(s.var("velPitch")), 0.12)),
+                                [
+                                    s.change_var("camYaw", s.var("velYaw")),
+                                    s.change_var("camPitch", s.var("velPitch")),
+                                    s.set_var("velYaw", s.mul(s.var("velYaw"), 0.80)),
+                                    s.set_var("velPitch", s.mul(s.var("velPitch"), 0.80)),
+                                    s.set_var("dTmp", 1),
+                                ],
+                                [
+                                    s.set_var("velYaw", 0),
+                                    s.set_var("velPitch", 0),
+                                ],
+                            ),
+                        ],
+                    ),
+                    *clamp_r(s, "camPitch", -48, 42),
                     s.if_(s.key_pressed("1"), [s.set_var("RENDER_MODE", 0), s.set_var("dTmp", 1)]),
                     s.if_(s.key_pressed("2"), [s.set_var("RENDER_MODE", 1), s.set_var("dTmp", 1)]),
                     s.if_(s.key_pressed("3"), [s.set_var("RENDER_MODE", 2), s.set_var("dTmp", 1)]),
